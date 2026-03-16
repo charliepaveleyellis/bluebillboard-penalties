@@ -295,7 +295,7 @@ function resetRound() {
 // ─── KEEPER AI ────────────────────────────────────
 function keeperDive(ballTargetX) {
   // Keeper guesses — gets smarter in later rounds
-  var accuracy = 0.3 + (round / TOTAL_ROUNDS) * 0.35; // 30%-65% chance to guess right
+  var accuracy = 0.5 + (round / TOTAL_ROUNDS) * 0.35; // 50%-85% chance to guess right
   var guessRight = Math.random() < accuracy;
 
   var ballCenter = ballTargetX;
@@ -321,7 +321,7 @@ function keeperDive(ballTargetX) {
 
   keeper.diving = true;
   keeper.diveT = 0;
-  keeper.targetX = keeper.x + keeper.diveDir * (goal.w * 0.38);
+  keeper.targetX = keeper.x + keeper.diveDir * (goal.w * 0.45);
 }
 
 // ─── SHOOT ────────────────────────────────────────
@@ -360,12 +360,12 @@ function checkSave() {
   // If diving, extend hitbox in dive direction
   if (keeper.diving) {
     if (keeper.diveDir === -1) {
-      kx -= 40;
-      kw += 40;
+      kx -= 55;
+      kw += 55;
     } else {
-      kw += 40;
+      kw += 55;
     }
-    kh += 15;
+    kh += 25;
   }
 
   // Check overlap
