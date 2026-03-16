@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Blue Billboard - Penalty Shootout</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', Arial, sans-serif;
+    overflow: hidden;
+    background: #000;
+    touch-action: manipulation;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  #camera {
+    position: fixed; top: 0; left: 0;
+    width: 100%; height: 100%;
+    object-fit: cover; z-index: 0;
+  }
+  #camera.hidden { display: none; }
+
+  .fallback-bg {
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    z-index: 0;
+    background: linear-gradient(135deg, #001a33 0%, #003d7a 50%, #001a33 100%);
+  }
+  .fallback-bg.hidden { display: none; }
+
+  canvas {
+    position: fixed; top: 0; left: 0;
+    width: 100vw; height: 100vh;
+    z-index: 1;
+  }
+
+  /* HUD */
+  #hud {
+    position: fixed; top: 0; left: 0; right: 0;
+    z-index: 2;
+    display: flex; justify-content: space-between; align-items: flex-start;
+    padding: 14px 20px;
+    background: linear-gradient(to bottom, rgba(0,0,0,0.6), transparent);
+    color: #fff; font-weight: 700;
+  }
+  #hud.hidden { display: none; }
+  #hud .logo img { height: 24px; }
+  #hud .round-info { text-align: center; }
+  #hud .round-text { font-size: 14px; color: #2ea3f2; }
+  #hud .score-text { font-size: 26px; margin-top: 2px; }
+  #hud .round-dots { display: flex; gap: 6px; margin-top: 6px; justify-content: center; }
+  #hud .dot {
+    width: 18px; height: 18px; border-radius: 50%;
+    border: 2px solid rgba(255,255,255,0.4);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px;
+  }
+  #hud .dot.goal { background: #2ea3f2; border-color: #2ea3f2; }
+  #hud .dot.saved { background: #ff5a4d; border-color: #ff5a4d; }
+  #hud .dot.pending { background: transparent; }
+
+  /* Overlays */
+  .overlay {
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    z-index: 10;
+    display: flex; flex-direction: column;
+    justify-content: center; align-items: center;
+    background: rgba(0, 20, 50, 0.92);
+    color: #fff; text-align: center;
+    padding: 30px;
+  }
+  .overlay.hidden { display: none; }
+  .overlay .logo-img { width: 180px; margin-bottom: 24px; }
+  .overlay h1 {
+    font-size: 30px; text-transform: uppercase;
+    letter-spacing: 3px; margin-bottom: 8px; color: #2ea3f2;
+  }
+  .overlay h2 {
+    font-size: 18px; font-weight: 400;
+    margin-bottom: 30px; color: #d9d9d9; line-height: 1.5;
+  }
+  .overlay .final-score {
+    font-size: 60px; font-weight: 900;
+    color: #297ff0; margin: 10px 0;
+  }
+  .overlay .final-label {
+    font-size: 16px; color: #d9d9d9;
+    text-transform: uppercase; letter-spacing: 2px;
+  }
+  .overlay .result-text {
+    font-size: 22px; color: #ffc107;
+    margin-top: 10px; font-weight: 700;
+  }
+
+  .btn {
+    display: inline-block;
+    padding: 16px 48px;
+    font-size: 18px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 2px;
+    color: #fff; background: #003d7a;
+    border: none; border-radius: 50px;
+    cursor: pointer; margin-top: 30px;
+    transition: background 0.2s;
+  }
+  .btn:active { background: #297ff0; }
+
+  .powered-by {
+    position: fixed; bottom: 12px; left: 0; right: 0;
+    text-align: center;
+    font-size: 11px; color: rgba(255,255,255,0.3);
+    letter-spacing: 1px; text-transform: uppercase;
+    z-index: 3; pointer-events: none;
+  }
+
+  /* Big announcement text */
+  #announce {
+    position: fixed; top: 40%; left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 4; pointer-events: none;
+    font-size: 44px; font-weight: 900;
+    text-transform: uppercase; letter-spacing: 4px;
+    text-shadow: 0 3px 15px rgba(0,0,0,0.6);
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+  #announce.show { opacity: 1; }
+
+  /* Swipe hint */
+  #swipeHint {
+    position: fixed; bottom: 18%; left: 0; right: 0;
+    text-align: center; z-index: 4;
+    color: rgba(255,255,255,0.6);
+    font-size: 16px; font-weight: 600;
+    pointer-events: none;
+    animation: pulse 1.5s ease-in-out infinite;
+  }
+  #swipeHint.hidden { display: none; }
+  @keyframes pulse {
+    0%, 100% { opacity: 0.4; }
+    50% { opacity: 1; }
+  }
+</style>
+</head>
+<body>
+
+<video id="camera" autoplay playsinline muted></video>
+<div class="fallback-bg hidden" id="fallbackBg"></div>
+<canvas id="game"></canvas>
+
+<!-- HUD -->
+<div id="hud" class="hidden">
+  <div class="logo"><img src="logo.png" alt="Blue Billboard"></div>
+  <div class="round-info">
+    <div class="round-text" id="roundText">Round 1/5</div>
+    <div class="score-text" id="scoreText">0 - 0</div>
+    <div class="round-dots" id="roundDots"></div>
+  </div>
+  <div style="width:50px;"></div>
+</div>
+
+<div id="announce"></div>
+<div id="swipeHint" class="hidden">Swipe to shoot!</div>
+
+<!-- Start -->
+<div class="overlay" id="startScreen">
+  <img src="logo.png" alt="Blue Billboard" class="logo-img">
+  <h1>Penalty Shootout</h1>
+  <h2>Swipe to kick the ball!<br>Beat the keeper in 5 rounds!</h2>
+  <button class="btn" id="startBtn">Play</button>
+</div>
+
+<!-- End -->
+<div class="overlay hidden" id="endScreen">
+  <img src="logo.png" alt="Blue Billboard" class="logo-img">
+  <h1 id="endTitle">Full Time!</h1>
+  <div class="final-label">Score</div>
+  <div class="final-score" id="finalScore">0 - 0</div>
+  <div class="result-text" id="resultText"></div>
+  <button class="btn" id="restartBtn">Play Again</button>
+</div>
+
+<div class="powered-by">Powered by Blue Billboard</div>
+
+<script>
+// ─── CAMERA ───────────────────────────────────────
+var cameraEl = document.getElementById('camera');
+var fallbackBg = document.getElementById('fallbackBg');
+(async function() {
+  try {
+    var stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment' }, audio: false
+    });
+    cameraEl.srcObject = stream;
+  } catch(e) {
+    cameraEl.classList.add('hidden');
+    fallbackBg.classList.remove('hidden');
+  }
+})();
+
+// ─── CANVAS ───────────────────────────────────────
+var canvas = document.getElementById('game');
+var ctx = canvas.getContext('2d');
+function resize() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+window.addEventListener('resize', resize);
+resize();
+
+// ─── COLOURS ──────────────────────────────────────
+var NAVY = '#003d7a';
+var BLUE = '#297ff0';
+var LIGHT = '#2ea3f2';
+var RED = '#ff5a4d';
+var GOLD = '#ffc107';
+var WHITE = '#fff';
+var GREEN = '#2ecc40';
+
+// ─── STATE ────────────────────────────────────────
+var running = false;
+var TOTAL_ROUNDS = 5;
+var round = 0;
+var playerScore = 0;
+var keeperScore = 0;
+var results = []; // 'goal', 'saved', 'pending'
+var phase = 'ready'; // ready, shooting, result, done
+var canSwipe = false;
+
+// Ball
+var ball = { x: 0, y: 0, startX: 0, startY: 0, targetX: 0, targetY: 0, t: 0, size: 28, visible: true };
+
+// Keeper
+var keeper = { x: 0, y: 0, w: 60, h: 80, targetX: 0, diveDir: 0, diveT: 0, diving: false };
+
+// Goal dimensions (relative to canvas)
+var goal = {};
+
+// Particles
+var particles = [];
+
+// Swipe
+var swipeStartX = 0;
+var swipeStartY = 0;
+var isSwiping = false;
+
+// ─── ELEMENTS ─────────────────────────────────────
+var hud = document.getElementById('hud');
+var roundText = document.getElementById('roundText');
+var scoreText = document.getElementById('scoreText');
+var roundDots = document.getElementById('roundDots');
+var announceEl = document.getElementById('announce');
+var swipeHint = document.getElementById('swipeHint');
+var startScreen = document.getElementById('startScreen');
+var endScreen = document.getElementById('endScreen');
+var finalScoreEl = document.getElementById('finalScore');
+var resultText = document.getElementById('resultText');
+var endTitle = document.getElementById('endTitle');
+
+// ─── GOAL SETUP ───────────────────────────────────
+function setupGoal() {
+  var gw = canvas.width * 0.78;
+  var gh = canvas.height * 0.28;
+  goal.x = (canvas.width - gw) / 2;
+  goal.y = canvas.height * 0.15;
+  goal.w = gw;
+  goal.h = gh;
+  goal.bottom = goal.y + goal.h;
+}
+
+// ─── RESET ROUND ──────────────────────────────────
+function resetRound() {
+  setupGoal();
+
+  ball.x = canvas.width / 2;
+  ball.y = canvas.height * 0.82;
+  ball.startX = ball.x;
+  ball.startY = ball.y;
+  ball.t = 0;
+  ball.size = 28;
+  ball.visible = true;
+
+  keeper.w = 50;
+  keeper.h = 75;
+  keeper.x = canvas.width / 2 - keeper.w / 2;
+  keeper.y = goal.bottom - keeper.h;
+  keeper.diving = false;
+  keeper.diveT = 0;
+
+  phase = 'ready';
+  canSwipe = true;
+  particles = [];
+}
+
+// ─── KEEPER AI ────────────────────────────────────
+function keeperDive(ballTargetX) {
+  // Keeper guesses — gets smarter in later rounds
+  var accuracy = 0.3 + (round / TOTAL_ROUNDS) * 0.35; // 30%-65% chance to guess right
+  var guessRight = Math.random() < accuracy;
+
+  var ballCenter = ballTargetX;
+  var goalCenter = goal.x + goal.w / 2;
+
+  if (guessRight) {
+    // Dive toward the ball
+    if (ballCenter < goalCenter - 30) {
+      keeper.diveDir = -1; // dive left
+    } else if (ballCenter > goalCenter + 30) {
+      keeper.diveDir = 1; // dive right
+    } else {
+      keeper.diveDir = Math.random() < 0.5 ? -1 : 1; // center shot — guess
+    }
+  } else {
+    // Dive wrong way
+    if (ballCenter < goalCenter) {
+      keeper.diveDir = 1;
+    } else {
+      keeper.diveDir = -1;
+    }
+  }
+
+  keeper.diving = true;
+  keeper.diveT = 0;
+  keeper.targetX = keeper.x + keeper.diveDir * (goal.w * 0.38);
+}
+
+// ─── SHOOT ────────────────────────────────────────
+function shoot(dx, dy) {
+  if (phase !== 'ready' || !canSwipe) return;
+  canSwipe = false;
+  phase = 'shooting';
+  swipeHint.classList.add('hidden');
+
+  // Target position in goal based on swipe direction
+  var goalCenterX = goal.x + goal.w / 2;
+  var goalCenterY = goal.y + goal.h * 0.4;
+
+  // Map swipe to target — more horizontal swipe = more to the side
+  var aimX = goalCenterX + dx * 1.2;
+  // Clamp within goal
+  aimX = Math.max(goal.x + 25, Math.min(goal.x + goal.w - 25, aimX));
+  var aimY = goalCenterY + (Math.random() - 0.5) * goal.h * 0.3;
+  aimY = Math.max(goal.y + 10, Math.min(goal.bottom - 20, aimY));
+
+  ball.targetX = aimX;
+  ball.targetY = aimY;
+  ball.t = 0;
+
+  // Keeper dives
+  keeperDive(aimX);
+}
+
+// ─── CHECK SAVE ───────────────────────────────────
+function checkSave() {
+  var kx = keeper.x;
+  var ky = keeper.y;
+  var kw = keeper.w;
+  var kh = keeper.h;
+
+  // If diving, extend hitbox in dive direction
+  if (keeper.diving) {
+    if (keeper.diveDir === -1) {
+      kx -= 40;
+      kw += 40;
+    } else {
+      kw += 40;
+    }
+    kh += 15;
+  }
+
+  // Check overlap
+  var bx = ball.x - ball.size / 2;
+  var by = ball.y - ball.size / 2;
+  var bw = ball.size;
+  var bh = ball.size;
+
+  return bx < kx + kw && bx + bw > kx && by < ky + kh && by + bh > ky;
+}
+
+// ─── ANNOUNCE ─────────────────────────────────────
+function announce(text, color, duration) {
+  announceEl.textContent = text;
+  announceEl.style.color = color;
+  announceEl.classList.add('show');
+  setTimeout(function() {
+    announceEl.classList.remove('show');
+  }, duration || 1200);
+}
+
+// ─── BURST ────────────────────────────────────────
+function burst(x, y, color1, color2) {
+  for (var i = 0; i < 18; i++) {
+    var angle = (i / 18) * Math.PI * 2;
+    var speed = 2 + Math.random() * 4;
+    particles.push({
+      x: x, y: y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      life: 25 + Math.random() * 15,
+      size: 2 + Math.random() * 4,
+      color: i % 2 === 0 ? color1 : color2
+    });
+  }
+}
+
+// ─── UPDATE HUD ───────────────────────────────────
+function updateHUD() {
+  roundText.textContent = 'Round ' + (round + 1) + '/' + TOTAL_ROUNDS;
+  scoreText.textContent = playerScore + ' - ' + keeperScore;
+
+  var html = '';
+  for (var i = 0; i < TOTAL_ROUNDS; i++) {
+    var cls = 'dot ';
+    var icon = '';
+    if (i < results.length) {
+      if (results[i] === 'goal') { cls += 'goal'; icon = '\u2713'; }
+      else { cls += 'saved'; icon = '\u2717'; }
+    } else {
+      cls += 'pending';
+    }
+    html += '<div class="' + cls + '">' + icon + '</div>';
+  }
+  roundDots.innerHTML = html;
+}
+
+// ─── DRAW ─────────────────────────────────────────
+
+function drawOverlay() {
+  ctx.fillStyle = 'rgba(0, 15, 40, 0.25)';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+}
+
+function drawPitch() {
+  // Ground
+  ctx.fillStyle = 'rgba(0, 50, 0, 0.35)';
+  ctx.fillRect(0, goal.bottom, canvas.width, canvas.height - goal.bottom);
+
+  // Penalty spot
+  ctx.fillStyle = 'rgba(255,255,255,0.5)';
+  ctx.beginPath();
+  ctx.arc(canvas.width / 2, ball.startY, 4, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Center line
+  ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(0, goal.bottom);
+  ctx.lineTo(canvas.width, goal.bottom);
+  ctx.stroke();
+}
+
+function drawGoal() {
+  var g = goal;
+
+  // Goal net (back)
+  ctx.fillStyle = 'rgba(255,255,255,0.06)';
+  ctx.fillRect(g.x, g.y, g.w, g.h);
+
+  // Net mesh
+  ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+  ctx.lineWidth = 0.8;
+  var spacing = 18;
+  for (var x = g.x; x <= g.x + g.w; x += spacing) {
+    ctx.beginPath();
+    ctx.moveTo(x, g.y);
+    ctx.lineTo(x, g.y + g.h);
+    ctx.stroke();
+  }
+  for (var y = g.y; y <= g.y + g.h; y += spacing) {
+    ctx.beginPath();
+    ctx.moveTo(g.x, y);
+    ctx.lineTo(g.x + g.w, y);
+    ctx.stroke();
+  }
+
+  // Goal frame
+  ctx.strokeStyle = WHITE;
+  ctx.lineWidth = 6;
+  ctx.lineCap = 'round';
+  // Left post
+  ctx.beginPath();
+  ctx.moveTo(g.x, g.y + g.h);
+  ctx.lineTo(g.x, g.y);
+  ctx.stroke();
+  // Crossbar
+  ctx.beginPath();
+  ctx.moveTo(g.x, g.y);
+  ctx.lineTo(g.x + g.w, g.y);
+  ctx.stroke();
+  // Right post
+  ctx.beginPath();
+  ctx.moveTo(g.x + g.w, g.y);
+  ctx.lineTo(g.x + g.w, g.y + g.h);
+  ctx.stroke();
+
+  // Blue Billboard banner on crossbar
+  ctx.fillStyle = 'rgba(0, 61, 122, 0.8)';
+  ctx.fillRect(g.x, g.y - 18, g.w, 18);
+  ctx.fillStyle = WHITE;
+  ctx.font = 'bold 11px Arial';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('BLUE BILLBOARD', g.x + g.w / 2, g.y - 9);
+}
+
+function drawKeeper() {
+  var k = keeper;
+  var kx = k.x;
+  var ky = k.y;
+
+  ctx.save();
+
+  if (k.diving) {
+    // Diving animation
+    var diveOffset = k.diveDir * k.diveT * (goal.w * 0.38);
+    kx = k.x + diveOffset;
+    // Rotate when diving
+    ctx.translate(kx + k.w / 2, ky + k.h / 2);
+    ctx.rotate(k.diveDir * k.diveT * 0.6);
+    ctx.translate(-(kx + k.w / 2), -(ky + k.h / 2));
+  }
+
+  // Body
+  ctx.fillStyle = GOLD;
+  ctx.fillRect(kx + 5, ky + 20, k.w - 10, k.h - 30);
+
+  // Shorts
+  ctx.fillStyle = NAVY;
+  ctx.fillRect(kx + 8, ky + k.h - 28, k.w - 16, 15);
+
+  // Head
+  ctx.fillStyle = '#ffcc99';
+  ctx.beginPath();
+  ctx.arc(kx + k.w / 2, ky + 12, 12, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Gloves
+  ctx.fillStyle = LIGHT;
+  if (k.diving) {
+    // Arms extended
+    ctx.fillRect(kx - 15, ky + 15, 18, 12);
+    ctx.fillRect(kx + k.w - 3, ky + 15, 18, 12);
+  } else {
+    // Arms at sides, slightly raised
+    ctx.fillRect(kx - 5, ky + 25, 12, 10);
+    ctx.fillRect(kx + k.w - 7, ky + 25, 12, 10);
+  }
+
+  // Legs
+  ctx.fillStyle = '#ffcc99';
+  ctx.fillRect(kx + 12, ky + k.h - 15, 8, 15);
+  ctx.fillRect(kx + k.w - 20, ky + k.h - 15, 8, 15);
+
+  // Boots
+  ctx.fillStyle = '#333';
+  ctx.fillRect(kx + 10, ky + k.h - 2, 12, 5);
+  ctx.fillRect(kx + k.w - 22, ky + k.h - 2, 12, 5);
+
+  ctx.restore();
+}
+
+function drawBall() {
+  if (!ball.visible) return;
+  var bx = ball.x;
+  var by = ball.y;
+  var r = ball.size / 2;
+
+  // Shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.2)';
+  ctx.beginPath();
+  ctx.ellipse(bx + 2, by + 2, r, r * 0.8, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Ball
+  ctx.fillStyle = WHITE;
+  ctx.beginPath();
+  ctx.arc(bx, by, r, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Outline
+  ctx.strokeStyle = '#ccc';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // Pentagon pattern
+  ctx.fillStyle = '#333';
+  for (var i = 0; i < 5; i++) {
+    var angle = (i / 5) * Math.PI * 2 - Math.PI / 2;
+    var px = bx + Math.cos(angle) * r * 0.5;
+    var py = by + Math.sin(angle) * r * 0.5;
+    ctx.beginPath();
+    ctx.arc(px, py, r * 0.18, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function drawParticles() {
+  for (var i = particles.length - 1; i >= 0; i--) {
+    var p = particles[i];
+    p.x += p.vx;
+    p.y += p.vy;
+    p.vy += 0.12;
+    p.life--;
+    if (p.life <= 0) { particles.splice(i, 1); continue; }
+    ctx.globalAlpha = p.life / 40;
+    ctx.fillStyle = p.color;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+// ─── GAME LOOP ────────────────────────────────────
+function gameLoop() {
+  if (!running) return;
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  drawOverlay();
+  setupGoal();
+  drawPitch();
+  drawGoal();
+
+  if (phase === 'shooting') {
+    // Animate ball toward target
+    ball.t += 0.03;
+    if (ball.t > 1) ball.t = 1;
+
+    // Ease out curve
+    var ease = 1 - Math.pow(1 - ball.t, 3);
+
+    // Arc — ball goes up then comes to target
+    var arcHeight = -120 * Math.sin(ball.t * Math.PI);
+
+    ball.x = ball.startX + (ball.targetX - ball.startX) * ease;
+    ball.y = ball.startY + (ball.targetY - ball.startY) * ease + arcHeight;
+
+    // Shrink ball as it goes into distance
+    ball.size = 28 - ease * 10;
+
+    // Keeper dive animation
+    if (keeper.diving) {
+      keeper.diveT += 0.04;
+      if (keeper.diveT > 1) keeper.diveT = 1;
+    }
+
+    // Check result at end of flight
+    if (ball.t >= 1) {
+      var saved = checkSave();
+      phase = 'result';
+
+      if (saved) {
+        results.push('saved');
+        keeperScore++;
+        announce('SAVED!', RED, 1500);
+        burst(ball.x, ball.y, RED, WHITE);
+        if (navigator.vibrate) navigator.vibrate([80, 40, 80]);
+      } else {
+        results.push('goal');
+        playerScore++;
+        announce('GOAL!', GREEN, 1500);
+        burst(ball.x, ball.y, LIGHT, GOLD);
+        if (navigator.vibrate) navigator.vibrate(50);
+      }
+
+      updateHUD();
+
+      // Next round or end
+      setTimeout(function() {
+        round++;
+        if (round >= TOTAL_ROUNDS) {
+          endGame();
+        } else {
+          resetRound();
+          updateHUD();
+          swipeHint.classList.remove('hidden');
+        }
+      }, 1800);
+    }
+  }
+
+  // Keeper idle sway when not diving
+  if (!keeper.diving && phase === 'ready') {
+    keeper.x = canvas.width / 2 - keeper.w / 2 + Math.sin(Date.now() * 0.003) * 20;
+  }
+
+  drawKeeper();
+  drawBall();
+  drawParticles();
+
+  requestAnimationFrame(gameLoop);
+}
+
+// ─── SWIPE ────────────────────────────────────────
+function onSwipeStart(x, y) {
+  if (!running || !canSwipe) return;
+  swipeStartX = x;
+  swipeStartY = y;
+  isSwiping = true;
+}
+
+function onSwipeEnd(x, y) {
+  if (!isSwiping || !running || !canSwipe) return;
+  isSwiping = false;
+
+  var dx = x - swipeStartX;
+  var dy = y - swipeStartY;
+
+  // Must swipe up
+  if (dy > -20) return;
+
+  shoot(dx, dy);
+}
+
+canvas.addEventListener('touchstart', function(e) {
+  e.preventDefault();
+  var t = e.changedTouches[0];
+  onSwipeStart(t.clientX, t.clientY);
+}, { passive: false });
+
+canvas.addEventListener('touchend', function(e) {
+  e.preventDefault();
+  var t = e.changedTouches[0];
+  onSwipeEnd(t.clientX, t.clientY);
+}, { passive: false });
+
+canvas.addEventListener('mousedown', function(e) { onSwipeStart(e.clientX, e.clientY); });
+canvas.addEventListener('mouseup', function(e) { onSwipeEnd(e.clientX, e.clientY); });
+
+// ─── START / END ──────────────────────────────────
+canvas.style.pointerEvents = 'none';
+
+function startGame() {
+  round = 0;
+  playerScore = 0;
+  keeperScore = 0;
+  results = [];
+
+  startScreen.classList.add('hidden');
+  endScreen.classList.add('hidden');
+  hud.classList.remove('hidden');
+  swipeHint.classList.remove('hidden');
+  canvas.style.pointerEvents = 'auto';
+  running = true;
+
+  resetRound();
+  updateHUD();
+  requestAnimationFrame(gameLoop);
+}
+
+function endGame() {
+  running = false;
+  canvas.style.pointerEvents = 'none';
+  hud.classList.add('hidden');
+  swipeHint.classList.add('hidden');
+
+  finalScoreEl.textContent = playerScore + ' - ' + (TOTAL_ROUNDS - playerScore);
+
+  if (playerScore >= 4) {
+    endTitle.textContent = 'CHAMPION!';
+    resultText.textContent = 'Incredible shooting!';
+  } else if (playerScore >= 3) {
+    endTitle.textContent = 'YOU WIN!';
+    resultText.textContent = 'Great penalties!';
+  } else if (playerScore === 2) {
+    endTitle.textContent = 'DRAW!';
+    resultText.textContent = 'So close!';
+  } else {
+    endTitle.textContent = 'YOU LOSE!';
+    resultText.textContent = 'The keeper wins this time...';
+  }
+
+  endScreen.classList.remove('hidden');
+}
+
+document.getElementById('startBtn').addEventListener('click', function(e) { e.preventDefault(); startGame(); });
+document.getElementById('restartBtn').addEventListener('click', function(e) { e.preventDefault(); startGame(); });
+</script>
+
+</body>
+</html>
