@@ -353,22 +353,23 @@ function shoot(dx, dy) {
 // ─── CHECK SAVE ───────────────────────────────────
 function checkSave() {
   // Use the actual dived position (matching what's drawn on screen)
-  var diveOffset = keeper.diving ? keeper.diveDir * keeper.diveT * (goal.w * 0.38) : 0;
+  var diveOffset = keeper.diving ? keeper.diveDir * keeper.diveT * (goal.w * 0.45) : 0;
   var kx = keeper.x + diveOffset;
   var ky = keeper.y;
   var kw = keeper.w;
   var kh = keeper.h;
 
-  // Extend hitbox when diving — arms stretched out
+  // Extend hitbox when diving — full body stretched horizontally
   if (keeper.diving) {
+    var reach = 90;
     if (keeper.diveDir === -1) {
-      kx -= 70;
-      kw += 70;
+      kx -= reach;
+      kw += reach;
     } else {
-      kw += 70;
+      kw += reach;
     }
-    kh += 30;
-    ky -= 10;
+    kh += 40;
+    ky -= 15;
   }
 
   // Check overlap with ball
@@ -516,7 +517,7 @@ function drawKeeper() {
 
   if (k.diving) {
     // Diving animation
-    var diveOffset = k.diveDir * k.diveT * (goal.w * 0.38);
+    var diveOffset = k.diveDir * k.diveT * (goal.w * 0.45);
     kx = k.x + diveOffset;
     // Rotate when diving
     ctx.translate(kx + k.w / 2, ky + k.h / 2);
@@ -648,9 +649,14 @@ function gameLoop() {
       if (keeper.diveT > 1) keeper.diveT = 1;
     }
 
-    // Check result at end of flight
-    if (ball.t >= 1) {
-      var saved = checkSave();
+    // Check save continuously once ball is near the goal
+    var saved = false;
+    if (ball.t > 0.6) {
+      saved = checkSave();
+    }
+
+    // Check result at end of flight or if saved mid-flight
+    if (saved || ball.t >= 1) {
       phase = 'result';
 
       if (saved) {
