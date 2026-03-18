@@ -352,23 +352,26 @@ function shoot(dx, dy) {
 
 // ─── CHECK SAVE ───────────────────────────────────
 function checkSave() {
-  var kx = keeper.x;
+  // Use the actual dived position (matching what's drawn on screen)
+  var diveOffset = keeper.diving ? keeper.diveDir * keeper.diveT * (goal.w * 0.38) : 0;
+  var kx = keeper.x + diveOffset;
   var ky = keeper.y;
   var kw = keeper.w;
   var kh = keeper.h;
 
-  // If diving, extend hitbox in dive direction
+  // Extend hitbox when diving — arms stretched out
   if (keeper.diving) {
     if (keeper.diveDir === -1) {
-      kx -= 55;
-      kw += 55;
+      kx -= 70;
+      kw += 70;
     } else {
-      kw += 55;
+      kw += 70;
     }
-    kh += 25;
+    kh += 30;
+    ky -= 10;
   }
 
-  // Check overlap
+  // Check overlap with ball
   var bx = ball.x - ball.size / 2;
   var by = ball.y - ball.size / 2;
   var bw = ball.size;
@@ -639,9 +642,9 @@ function gameLoop() {
     // Shrink ball as it goes into distance
     ball.size = 28 - ease * 10;
 
-    // Keeper dive animation
+    // Keeper dive animation — fast enough to reach the ball
     if (keeper.diving) {
-      keeper.diveT += 0.04;
+      keeper.diveT += 0.055;
       if (keeper.diveT > 1) keeper.diveT = 1;
     }
 
