@@ -359,17 +359,17 @@ function checkSave() {
   var kw = keeper.w;
   var kh = keeper.h;
 
-  // Extend hitbox when diving — full body stretched horizontally
+  // Extend hitbox when diving — full body stretched horizontally + upward for arc
   if (keeper.diving) {
-    var reach = 90;
+    var reach = 100;
     if (keeper.diveDir === -1) {
       kx -= reach;
       kw += reach;
     } else {
       kw += reach;
     }
-    kh += 40;
-    ky -= 15;
+    kh += 60;
+    ky -= 50; // extend upward to catch arcing balls
   }
 
   // Check overlap with ball
@@ -634,8 +634,8 @@ function gameLoop() {
     // Ease out curve
     var ease = 1 - Math.pow(1 - ball.t, 3);
 
-    // Arc — ball goes up then comes to target
-    var arcHeight = -120 * Math.sin(ball.t * Math.PI);
+    // Arc — gentle curve, not too high so keeper can reach it
+    var arcHeight = -40 * Math.sin(ball.t * Math.PI);
 
     ball.x = ball.startX + (ball.targetX - ball.startX) * ease;
     ball.y = ball.startY + (ball.targetY - ball.startY) * ease + arcHeight;
@@ -649,9 +649,9 @@ function gameLoop() {
       if (keeper.diveT > 1) keeper.diveT = 1;
     }
 
-    // Check save continuously once ball is near the goal
+    // Check save once ball is near goal height
     var saved = false;
-    if (ball.t > 0.6) {
+    if (ball.t > 0.75) {
       saved = checkSave();
     }
 
