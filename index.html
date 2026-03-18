@@ -359,15 +359,11 @@ function getKeeperHitbox() {
   var kh = keeper.h;
 
   if (keeper.diving) {
-    var reach = 100;
-    if (keeper.diveDir === -1) {
-      kx -= reach;
-      kw += reach;
-    } else {
-      kw += reach;
-    }
-    kh += 60;
-    ky -= 50;
+    // Massive hitbox — covers the whole area the keeper dives through
+    kx -= 120;
+    kw += 240;
+    kh += 80;
+    ky -= 60;
   }
   return {x:kx,y:ky,w:kw,h:kh};
 }
