@@ -351,15 +351,13 @@ function shoot(dx, dy) {
 }
 
 // ─── CHECK SAVE ───────────────────────────────────
-function checkSave() {
-  // Use the actual dived position (matching what's drawn on screen)
+function getKeeperHitbox() {
   var diveOffset = keeper.diving ? keeper.diveDir * keeper.diveT * (goal.w * 0.45) : 0;
   var kx = keeper.x + diveOffset;
   var ky = keeper.y;
   var kw = keeper.w;
   var kh = keeper.h;
 
-  // Extend hitbox when diving — full body stretched horizontally + upward for arc
   if (keeper.diving) {
     var reach = 100;
     if (keeper.diveDir === -1) {
@@ -369,16 +367,20 @@ function checkSave() {
       kw += reach;
     }
     kh += 60;
-    ky -= 50; // extend upward to catch arcing balls
+    ky -= 50;
   }
+  return {x:kx,y:ky,w:kw,h:kh};
+}
 
-  // Check overlap with ball
+function checkSave() {
+  var hb = getKeeperHitbox();
+
   var bx = ball.x - ball.size / 2;
   var by = ball.y - ball.size / 2;
   var bw = ball.size;
   var bh = ball.size;
 
-  return bx < kx + kw && bx + bw > kx && by < ky + kh && by + bh > ky;
+  return bx < hb.x + hb.w && bx + bw > hb.x && by < hb.y + hb.h && by + bh > hb.y;
 }
 
 // ─── ANNOUNCE ─────────────────────────────────────
@@ -697,6 +699,17 @@ function gameLoop() {
   drawKeeper();
   drawBall();
   drawParticles();
+
+  // DEBUG: draw keeper hitbox in red outline during shooting
+  if (phase === 'shooting' && keeper.diving) {
+    var hb = getKeeperHitbox();
+    ctx.strokeStyle = 'rgba(255,0,0,0.5)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(hb.x, hb.y, hb.w, hb.h);
+    // Also draw ball hitbox
+    ctx.strokeStyle = 'rgba(0,255,0,0.5)';
+    ctx.strokeRect(ball.x-ball.size/2, ball.y-ball.size/2, ball.size, ball.size);
+  }
 
   requestAnimationFrame(gameLoop);
 }
